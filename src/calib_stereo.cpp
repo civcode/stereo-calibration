@@ -18,7 +18,7 @@ std::vector<std::vector<cv::Point2f>> imagePoints1, imagePoints2;
 std::vector<cv::Point2f> corners1, corners2;
 std::vector<std::vector<cv::Point2f>> left_img_points, right_img_points;
 
-cv::Mat img1, img2, gray1, gray2;
+cv::Mat gray1, gray2;
 
 void GetImagePoints(int board_width, int board_height, float square_size,
                     const std::vector<std::string>& image_names) {
@@ -36,34 +36,24 @@ void GetImagePoints(int board_width, int board_height, float square_size,
     cv::Mat img1 = stereo_img(cv::Rect(0, 0, stereo_img.cols / 2, stereo_img.rows));
     cv::Mat img2 = stereo_img(cv::Rect(stereo_img.cols / 2, 0, stereo_img.cols / 2, stereo_img.rows));
 
-    // if (img1.empty() || img2.empty()) {
-    //   cout << "Error reading images: " << left_img << " or " << right_img << endl;
-    //   continue;
-    // }
-
     cv::cvtColor(img1, gray1, cv::COLOR_BGR2GRAY);
     cv::cvtColor(img2, gray2, cv::COLOR_BGR2GRAY);
 
-    cout << "findChessboardCorners" << endl;
+    // cout << "findChessboardCorners" << endl;
     bool found1 = cv::findChessboardCorners(img1, board_size, corners1,
                                             cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FILTER_QUADS);
     bool found2 = cv::findChessboardCorners(img2, board_size, corners2,
                                             cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FILTER_QUADS);
 
     if (!found1 || !found2) {
-      cout << "Chessboard find error!" << endl;
-      // cout << "Left image: " << left_img << ", Right image: " << right_img << endl;
+      cout << "Could not find chessboard corners" << endl;
       continue;
     }
-    cout << "Subpixel" << endl;
 
     cv::cornerSubPix(gray1, corners1, cv::Size(5, 5), cv::Size(-1, -1),
                      cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 30, 0.1));
     cv::cornerSubPix(gray2, corners2, cv::Size(5, 5), cv::Size(-1, -1),
                      cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 30, 0.1));
-
-    cout << "corners1 size: " << corners1.size() << endl;
-    cout << "corners2 size: " << corners2.size() << endl;
 
     std::vector<cv::Point3f> obj;
     for (int i = 0; i < board_height; i++) {
@@ -73,21 +63,20 @@ void GetImagePoints(int board_width, int board_height, float square_size,
     }
 
     if (found1 && found2) {
-      // cout << i << ". Found corners!" << endl;
       imagePoints1.push_back(corners1);
       imagePoints2.push_back(corners2);
       object_points.push_back(obj);
     }
+  }
 
-    for (int i = 0; i < imagePoints1.size(); i++) {
-      std::vector<cv::Point2f> v1, v2;
-      for (int j = 0; j < imagePoints1[i].size(); j++) {
-        v1.push_back(cv::Point2f((double)imagePoints1[i][j].x, (double)imagePoints1[i][j].y));
-        v2.push_back(cv::Point2f((double)imagePoints2[i][j].x, (double)imagePoints2[i][j].y));
-      }
-      left_img_points.push_back(v1);
-      right_img_points.push_back(v2);
+  for (size_t i = 0; i < imagePoints1.size(); i++) {
+    std::vector<cv::Point2f> v1, v2;
+    for (size_t j = 0; j < imagePoints1[i].size(); j++) {
+      v1.push_back(cv::Point2f((double)imagePoints1[i][j].x, (double)imagePoints1[i][j].y));
+      v2.push_back(cv::Point2f((double)imagePoints2[i][j].x, (double)imagePoints2[i][j].y));
     }
+    left_img_points.push_back(v1);
+    right_img_points.push_back(v2);
   }
 }
 
@@ -98,9 +87,6 @@ int main(int argc, char* argv[]) {
   std::string left_img_file;
   std::string right_img_file;
   std::string stereo_img_file;
-  // std::string leftimg_filename;
-  // std::string rightimg_filename;
-  // std::string extension;
   std::string out_file;
 
   try {
@@ -200,8 +186,34 @@ int main(int argc, char* argv[]) {
   cout << "left_image_points size: " << left_img_points.size() << endl;
   cout << "right_image_points size: " << right_img_points.size() << endl;
 
-  cv::stereoCalibrate(object_points, left_img_points, right_img_points, K1, D1, K2, D2,
-                      img1.size(), R, T, E, F, flag);
+  // cv::stereoCalibrate(object_points, left_img_points, right_img_points, K1, D1, K2, D2,
+  //                     img1.size(), R, T, E, F, flag);
+
+  int flags = (cv::CALIB_USE_INTRINSIC_GUESS |
+				        cv::CALIB_FIX_ASPECT_RATIO |
+                cv::CALIB_ZERO_TANGENT_DIST |
+                cv::CALIB_SAME_FOCAL_LENGTH |
+                cv::CALIB_RATIONAL_MODEL |
+                cv::CALIB_FIX_K3 |
+                cv::CALIB_FIX_K4 |
+                cv::CALIB_FIX_K5);
+
+  cv::Mat img = cv::imread(image_names[0]);
+  if (img.empty()) {
+      std::cerr << "Failed to load reference image to get image size!" << std::endl;
+      return -1;
+  }
+  cv::Mat img1 = img(cv::Rect(0, 0, img.cols / 2, img.rows));
+  cv::Mat per_view_errors;
+  // double rms = cv::stereoCalibrate(object_points, left_img_points, right_img_points, K1, D1, K2, D2,
+  //                     cv::Size(img1.size().width/2, img1.size().height), R, T, E, F, per_view_errors, flags,
+  //                   cv::TermCriteria(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 100, 1e-5));
+
+  double rms = cv::stereoCalibrate(object_points, left_img_points, right_img_points, K1, D1, K2, D2,
+                      img1.size(), R, T, E, F, per_view_errors, flags,
+                    cv::TermCriteria(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 100, 1e-5));
+  cout << "img1 size: " << img1.size() << endl;
+  cout << "RMS error: " << rms << endl;
 
   cv::FileStorage fs1(out_file, cv::FileStorage::WRITE);
   fs1 << "K1" << K1;
@@ -213,18 +225,41 @@ int main(int argc, char* argv[]) {
   fs1 << "E" << E;
   fs1 << "F" << F;
 
+  cout << "K1: " << K1 << endl;
+  cout << "K2: " << K2 << endl;
+  cout << "D1: " << D1 << endl;
+  cout << "D2: " << D2 << endl;
+  cout << "R: " << R << endl;
+  cout << "T: " << T << endl;
+  cout << "E: " << E << endl;
+  cout << "F: " << F << endl;
+
+
   cout << "Done Calibration" << endl;
 
   cout << "Starting Rectification" << endl;
 
   cv::Mat R1, R2, P1, P2, Q;
-  cv::stereoRectify(K1, D1, K2, D2, img1.size(), R, T, R1, R2, P1, P2, Q);
+
+  // if (K1.empty() || K2.empty() || D1.empty() || D2.empty() || R.empty() || T.empty()) {
+  //   cout << "Error: One or more input matrices (K1, K2, D1, D2, R, T) are empty. Cannot perform stereo rectification." << endl;
+  //   return -1;
+  // }
+
+  // cv::stereoRectify(K1, D1, K2, D2, img1.size(), R, T, R1, R2, P1, P2, Q);
+  cv::stereoRectify(K1, D1, K2, D2, img1.size(), R, T, R1, R2, P1, P2, Q, 0, 0);
 
   fs1 << "R1" << R1;
   fs1 << "R2" << R2;
   fs1 << "P1" << P1;
   fs1 << "P2" << P2;
   fs1 << "Q" << Q;
+
+  cout << "R1: " << R1 << endl;
+  cout << "R2: " << R2 << endl;
+  cout << "P1: " << P1 << endl;
+  cout << "P2: " << P2 << endl;
+  cout << "Q: " << Q << endl;
 
   cout << "Done Rectification" << endl;
 

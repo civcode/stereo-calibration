@@ -32,5 +32,5 @@ target_link_libraries(calibrate_intrinsic ${OpenCV_LIBS} cxxopts)
 add_executable(calibrate_stereo src/calib_stereo.cpp)
 target_link_libraries(calibrate_stereo ${OpenCV_LIBS} cxxopts)
 
-# add_executable(undistort_rectify src/undistort_rectify.cpp)
-# target_link_libraries(undistort_rectify ${OpenCV_LIBS})
+add_executable(undistort_rectify src/undistort_rectify.cpp)
+target_link_libraries(undistort_rectify ${OpenCV_LIBS} cxxopts)
