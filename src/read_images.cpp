@@ -72,7 +72,7 @@ int main(int argc, char* argv[])
     cv::imshow("IMG1", img_res1);
     cv::imshow("IMG2", img_res2);
 
-    if (cv::waitKey(30) > 0) {
+    if (cv::waitKey(1) > 0) {
       x++;
       char filename1[200], filename2[200];
       sprintf(filename1, "%sleft%d.%s", image_directory.c_str(), x, extension.c_str());
