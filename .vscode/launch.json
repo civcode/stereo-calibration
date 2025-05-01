@@ -6,13 +6,44 @@
     "configurations": [
 
         {
-            "name": "(gdb) Launch",
+            "name": "(gdb) Launch read",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/cam-test",
-            "args": [],
+            "program": "${workspaceFolder}/build/read",
+            "args": ["-n", "5", "-i", "left"],
             "stopAtEntry": false,
-            "cwd": "${fileDirname}",
+            "cwd": "${fileDirname}/../build",
+            "environment": [
+                {
+                    "name": "DISPLAY",
+                    "value": "10.0"
+                }
+            ],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "preLaunchTask": "make build",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                },
+                {
+                    "description":  "Set Disassembly Flavor to Intel",
+                    "text": "-gdb-set disassembly-flavor intel",
+                    "ignoreFailures": true
+                }
+            ]
+        },
+
+        {
+            "name": "(gdb) Launch calibrate",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/calibrate",
+            "args": ["-n", "5", "-i", "left"],
+            "stopAtEntry": false,
+            "cwd": "${fileDirname}/../build",
             "environment": [
                 {
                     "name": "DISPLAY",
