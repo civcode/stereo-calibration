@@ -9,15 +9,13 @@
             "name": "(gdb) Launch read",
             "type": "cppdbg",
             "request": "launch",
-            "program": "${workspaceFolder}/build/read",
-            "args": ["-n", "5", "-i", "left"],
+            "program": "${workspaceFolder}/build/capture_stereo",
+            // "args": ["-n", "5", "-i", "left"],
+            "args": [],
             "stopAtEntry": false,
             "cwd": "${fileDirname}/../build",
             "environment": [
-                {
-                    "name": "DISPLAY",
-                    "value": "10.0"
-                }
+                { "name": "DISPLAY", "value": "${env:DISPLAY}" }
             ],
             "externalConsole": false,
             "MIMode": "gdb",

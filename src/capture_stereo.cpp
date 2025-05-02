@@ -8,6 +8,10 @@
 
 #include "cxxopts.hpp"
 
+#include "calibration/double_buffered_camera.hpp"
+#include "calibration/types.hpp"
+
+
 namespace fs = std::filesystem;
 
 using std::cout;
@@ -85,6 +89,13 @@ int main(int argc, char* argv[])
     return -1;
   }
 
+  // {
+  //   cv::Mat tmp1;
+  //   cv::Mat tmp2;
+  //   cap1 >> tmp1;
+  //   cap2 >> tmp2;
+  // }
+
   cap1.set(cv::CAP_PROP_FRAME_WIDTH, image_width);
   cap1.set(cv::CAP_PROP_FRAME_HEIGHT, image_height);
   cap1.set(cv::CAP_PROP_FPS, frames_per_second);
@@ -103,8 +114,28 @@ int main(int argc, char* argv[])
   fps = cap2.get(cv::CAP_PROP_FPS);
   cout << "Camera 2: " << width << "x" << height << " @ " << fps << " FPS" << endl;
 
+  DoubleBufferedCamera camera1(cap1, 1);
+  DoubleBufferedCamera camera2(cap2, 2);
+  camera1.start();
+  camera2.start();
+
+  {
+    cout << "Waiting for cameras to start" << endl;
+    while (true) {
+      auto frame1 = camera1.getLatestFrame();
+      auto frame2 = camera2.getLatestFrame();
+      if (!frame1.frame.empty() && !frame2.frame.empty()) {
+        break;
+      }
+      cout << "." << std::flush;
+      std::this_thread::sleep_for(std::chrono::milliseconds(250));
+    }
+    cout << endl;
+    cout << "Cameras started" << endl;
+  }
+
   cv::Mat img1;
-  cv::Mat img_res;
+  cv::Mat img_scaled;
   cv::Mat img2;
   cv::Mat img_res2;
   cv::Mat stereo_image;
@@ -113,25 +144,45 @@ int main(int argc, char* argv[])
   cv::namedWindow("Stereo IMG", cv::WINDOW_AUTOSIZE);
   cv::moveWindow("Stereo IMG", 100, 100);
 
+  int count = 0;
+  bool switch_img_pos = false;
   bool is_running = true;
   while (is_running) {
-    cap1 >> img1;
-    cap2 >> img2;
 
-    if (img1.empty() || img2.empty()) {
-      std::cerr << "Error capturing images" << endl;
-      continue;
-    }
+    bool is_synchronous;
+    do {
+      is_synchronous = false;
+      auto frame1 = camera1.getLatestFrame();
+      auto frame2 = camera2.getLatestFrame();
 
-    cv::hconcat(img1, img2, stereo_image);
+      if (frame1.frame.empty() || frame2.frame.empty()) {
+        std::cerr << "Error capturing images [" << count++ << "]" << endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        continue;
+      }
+
+      auto dt = std::chrono::duration_cast<std::chrono::milliseconds>(
+          frame1.timestamp - frame2.timestamp).count();
+
+      if (std::abs(dt) < 10) {
+        is_synchronous = true;
+        if (switch_img_pos) {
+          cv::hconcat(frame2.frame, frame1.frame, stereo_image);
+        } else {
+          cv::hconcat(frame1.frame, frame2.frame, stereo_image);
+        }
+      } else {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      }
+    } while (!is_synchronous);
 
     if (scale_factor - 1.0 > 0.01) {
-      cv::resize(stereo_image, img_res, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
+      cv::resize(stereo_image, img_scaled, cv::Size(), scale_factor, scale_factor, cv::INTER_NEAREST);
     } else {
-      img_res = stereo_image;
+      img_scaled = stereo_image;
     }
 
-    cv::imshow("Stereo IMG", img_res);
+    cv::imshow("Stereo IMG", img_scaled);
 
     int key = cv::waitKey(1);
     switch (key) {
@@ -144,6 +195,7 @@ int main(int argc, char* argv[])
         is_running = false;
         break;
       case 's':
+      {
         char filename[200];
         sprintf(filename, "%s/stereo-%.5d%s", image_directory.c_str(), img_count, extension.c_str());
         img_count++;
@@ -155,6 +207,11 @@ int main(int argc, char* argv[])
           cout << "Saved stereo image " << img_count << endl;
           image_names.push_back(filename);
         }
+        break;
+      }
+      case 'x':
+        cout << "Switching camera positions" << endl;
+        switch_img_pos = !switch_img_pos;
         break;
     }
   }
@@ -168,6 +225,8 @@ int main(int argc, char* argv[])
     cout << "Saved image names to " << out_file_name << endl;
   }
 
+  camera1.stop();
+  camera2.stop();
   cap1.release();
   cap2.release();
   cv::destroyAllWindows();
