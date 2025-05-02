@@ -110,6 +110,9 @@ int main(int argc, char* argv[])
 
   std::vector<std::string> image_names;
 
+  cv::namedWindow("IMG", cv::WINDOW_AUTOSIZE);
+  cv::moveWindow("IMG", 100, 100);
+
   bool is_running = true;
   while (is_running) {
     cap >> img;

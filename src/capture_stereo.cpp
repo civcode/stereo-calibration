@@ -103,9 +103,15 @@ int main(int argc, char* argv[])
   fps = cap2.get(cv::CAP_PROP_FPS);
   cout << "Camera 2: " << width << "x" << height << " @ " << fps << " FPS" << endl;
 
-  cv::Mat img1, img_res, img2, img_res2;
+  cv::Mat img1;
+  cv::Mat img_res;
+  cv::Mat img2;
+  cv::Mat img_res2;
   cv::Mat stereo_image;
   std::vector<std::string> image_names;
+
+  cv::namedWindow("Stereo IMG", cv::WINDOW_AUTOSIZE);
+  cv::moveWindow("Stereo IMG", 100, 100);
 
   bool is_running = true;
   while (is_running) {
@@ -132,9 +138,11 @@ int main(int argc, char* argv[])
       case 27: // ESC key
         cout << "ESC key pressed. Exiting..." << endl;
         is_running = false;
+        break;
       case 'q':
         cout << "q key pressed. Exiting..." << endl;
         is_running = false;
+        break;
       case 's':
         char filename[200];
         sprintf(filename, "%s/stereo-%.5d%s", image_directory.c_str(), img_count, extension.c_str());

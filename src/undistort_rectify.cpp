@@ -101,7 +101,7 @@ int main(int argc, char* argv[])
   }
 
   cv::namedWindow("Left Undistorted Image", cv::WINDOW_NORMAL);
-  cv::imshow("Left Undistorted Image", img1);
+  cv::imshow("Left Undistorted Image", imgU1);
   cv::namedWindow("Right Undistorted Image", cv::WINDOW_NORMAL);
   cv::imshow("Right Undistorted Image", imgU2);
   cv::waitKey(0);

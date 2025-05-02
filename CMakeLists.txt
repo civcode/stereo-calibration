@@ -18,7 +18,10 @@ set(CMAKE_BUILD_TYPE Debug)
 
 find_package(OpenCV REQUIRED)
 
-include_directories($(OpenCV_INCLUDE_DIRS))
+include_directories(
+  ${CMAKE_SOURCE_DIR}/include
+  $(OpenCV_INCLUDE_DIRS)
+)
 
 add_executable(capture_mono src/capture_mono.cpp)
 target_link_libraries(capture_mono ${OpenCV_LIBS} cxxopts)
@@ -26,10 +29,10 @@ target_link_libraries(capture_mono ${OpenCV_LIBS} cxxopts)
 add_executable(capture_stereo src/capture_stereo.cpp)
 target_link_libraries(capture_stereo ${OpenCV_LIBS} cxxopts)
 
-add_executable(calibrate_intrinsic src/calib_intrinsic.cpp)
+add_executable(calibrate_intrinsic src/calibrate_intrinsic.cpp)
 target_link_libraries(calibrate_intrinsic ${OpenCV_LIBS} cxxopts)
 
-add_executable(calibrate_stereo src/calib_stereo.cpp)
+add_executable(calibrate_stereo src/calibrate_stereo.cpp)
 target_link_libraries(calibrate_stereo ${OpenCV_LIBS} cxxopts)
 
 add_executable(undistort_rectify src/undistort_rectify.cpp)

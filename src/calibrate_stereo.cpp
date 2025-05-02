@@ -8,7 +8,10 @@
 #include <opencv2/calib3d/calib3d.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
+
 #include "cxxopts.hpp"
+
+#include "calibration/types.hpp"
 
 using std::cout;
 using std::endl;
@@ -18,11 +21,19 @@ std::vector<std::vector<cv::Point2f>> imagePoints1, imagePoints2;
 std::vector<cv::Point2f> corners1, corners2;
 std::vector<std::vector<cv::Point2f>> left_img_points, right_img_points;
 
-cv::Mat gray1, gray2;
 
 void GetImagePoints(int board_width, int board_height, float square_size,
-                    const std::vector<std::string>& image_names) {
+                    const std::vector<std::string>& image_names, const VisualizationConfig& config) {
 
+  if (config.visualize) {
+    cv::namedWindow("Corners 1", cv::WINDOW_AUTOSIZE);
+    cv::namedWindow("Corners 2", cv::WINDOW_AUTOSIZE);
+    cv::moveWindow("Corners 1", 100, 100);
+    cv::moveWindow("Corners 2", 200, 100);
+  }
+
+  cv::Mat gray1;
+  cv::Mat gray2;
   cv::Size board_size = cv::Size(board_width, board_height);
 
   for (auto & name : image_names) {
@@ -39,21 +50,31 @@ void GetImagePoints(int board_width, int board_height, float square_size,
     cv::cvtColor(img1, gray1, cv::COLOR_BGR2GRAY);
     cv::cvtColor(img2, gray2, cv::COLOR_BGR2GRAY);
 
-    // cout << "findChessboardCorners" << endl;
-    bool found1 = cv::findChessboardCorners(img1, board_size, corners1,
-                                            cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FILTER_QUADS);
-    bool found2 = cv::findChessboardCorners(img2, board_size, corners2,
-                                            cv::CALIB_CB_ADAPTIVE_THRESH | cv::CALIB_CB_FILTER_QUADS);
+    int flags = (cv::CALIB_CB_ADAPTIVE_THRESH |
+                  cv::CALIB_CB_NORMALIZE_IMAGE |
+                  cv::CALIB_CB_FAST_CHECK |
+                  cv::CALIB_CB_FILTER_QUADS);
+
+    bool found1 = cv::findChessboardCorners(img1, board_size, corners1, flags);
+    bool found2 = cv::findChessboardCorners(img2, board_size, corners2, flags);
 
     if (!found1 || !found2) {
       cout << "Could not find chessboard corners" << endl;
       continue;
     }
 
-    cv::cornerSubPix(gray1, corners1, cv::Size(5, 5), cv::Size(-1, -1),
-                     cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 30, 0.1));
-    cv::cornerSubPix(gray2, corners2, cv::Size(5, 5), cv::Size(-1, -1),
-                     cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 30, 0.1));
+    auto criteria = cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 100, 1E-5);
+
+    cv::cornerSubPix(gray1, corners1, cv::Size(5, 5), cv::Size(-1, -1), criteria);
+    cv::cornerSubPix(gray2, corners2, cv::Size(5, 5), cv::Size(-1, -1), criteria);
+
+    if (config.visualize) {
+      cv::drawChessboardCorners(img1, board_size, corners1, found1);
+      cv::drawChessboardCorners(img2, board_size, corners2, found2);
+      cv::imshow("Corners 1", img1);
+      cv::imshow("Corners 2", img2);
+      cv::waitKey(config.wait_time);
+    }
 
     std::vector<cv::Point3f> obj;
     for (int i = 0; i < board_height; i++) {
@@ -81,30 +102,29 @@ void GetImagePoints(int board_width, int board_height, float square_size,
 }
 
 int main(int argc, char* argv[]) {
-  int num_imgs;
+
   std::string left_calib_file;
   std::string right_calib_file;
-  std::string left_img_file;
-  std::string right_img_file;
   std::string stereo_img_file;
   std::string out_file;
+
+  VisualizationConfig config;
 
   try {
     cxxopts::Options options(argv[0], "Stereo camera calibration using checkerboard images");
     options.add_options()
-      // ("n,num_imgs", "Number of checkerboard images", cxxopts::value<int>(num_imgs))
-      ("u,left_calib_file", "Left camera calibration file", cxxopts::value<std::string>(left_calib_file))
-      ("v,right_calib_file", "Right camera calibration file", cxxopts::value<std::string>(right_calib_file))
+      ("l,left_calib_file", "Left camera calibration file", cxxopts::value<std::string>(left_calib_file))
+      ("r,right_calib_file", "Right camera calibration file", cxxopts::value<std::string>(right_calib_file))
       ("s,stereo_img_file", "Stereo image file list", cxxopts::value<std::string>(stereo_img_file))
-      // ("l,left_img_file", "Directory containing left images", cxxopts::value<std::string>(left_img_file))
-      // ("r,right_img_file", "Directory containing right images", cxxopts::value<std::string>(right_img_file))
-      // ("l,leftimg_filename", "Left image prefix", cxxopts::value<std::string>(leftimg_filename))
-      // ("r,rightimg_filename", "Right image prefix", cxxopts::value<std::string>(rightimg_filename))
-      // ("e,extension", "Image extension", cxxopts::value<std::string>(extension)->default_value(".png"))
       ("o,out_file", "Output calibration filename (YML)", cxxopts::value<std::string>(out_file)->default_value("stereo_calib.json"))
+      ("v,visualize", "Visualize corners", cxxopts::value<bool>()->default_value("false"))
+      ("d,delay", "Wait time for visualization in ms", cxxopts::value<int>()->default_value("500"))
       ("help", "Print help");
 
     auto result = options.parse(argc, argv);
+
+    config = {.visualize = result["visualize"].as<bool>(),
+              .wait_time = result["delay"].as<int>()};
 
     if (result.count("help")) {
       cout << options.help() << endl;
@@ -119,9 +139,9 @@ int main(int argc, char* argv[]) {
   cv::FileStorage fsl(left_calib_file, cv::FileStorage::READ);
   cv::FileStorage fsr(right_calib_file, cv::FileStorage::READ);
 
-  int board_width = (int)fsl["board_width"];
-  int board_height = (int)fsl["board_height"];
-  float square_size = (float)fsl["square_size"];
+  int board_width = static_cast<int>(fsl["board_width"]);
+  int board_height = static_cast<int>(fsl["board_height"]);
+  float square_size = static_cast<float>(fsl["square_size"]);
 
   cout << "Board width: " << board_width << endl;
   cout << "Board height: " << board_height << endl;
@@ -137,7 +157,6 @@ int main(int argc, char* argv[]) {
     std::vector<std::string> name_list;
     fs["image_names"] >> name_list;
     fs.release();
-    //check if files exits
     for (const auto& name : name_list) {
       if (!std::filesystem::exists(name)) {
         cout << "File does not exist: " << name << endl;
@@ -167,7 +186,7 @@ int main(int argc, char* argv[]) {
     }
   }
 
-  GetImagePoints(board_width, board_height, square_size, image_names);
+  GetImagePoints(board_width, board_height, square_size, image_names, config);
 
   cout << "Starting Calibration" << endl;
   cv::Mat K1, K2, R, F, E;
@@ -179,15 +198,21 @@ int main(int argc, char* argv[]) {
   fsl["D"] >> D1;
   fsr["D"] >> D2;
 
-  int flag = 0;
-  flag |= cv::CALIB_FIX_INTRINSIC;
 
   cout << "object_points size: " << object_points.size() << endl;
   cout << "left_image_points size: " << left_img_points.size() << endl;
   cout << "right_image_points size: " << right_img_points.size() << endl;
 
-  // cv::stereoCalibrate(object_points, left_img_points, right_img_points, K1, D1, K2, D2,
-  //                     img1.size(), R, T, E, F, flag);
+
+  cv::Mat stereo_img = cv::imread(image_names[0]);
+  if (stereo_img.empty()) {
+      std::cerr << "Failed to load reference image to get image size!" << std::endl;
+      return -1;
+  }
+  cv::Mat img = stereo_img(cv::Rect(0, 0, stereo_img.cols / 2, stereo_img.rows));
+  cv::Mat per_view_errors;
+
+  // int flags = (cv::CALIB_FIX_INTRINSIC);
 
   int flags = (cv::CALIB_USE_INTRINSIC_GUESS |
 				        cv::CALIB_FIX_ASPECT_RATIO |
@@ -198,21 +223,12 @@ int main(int argc, char* argv[]) {
                 cv::CALIB_FIX_K4 |
                 cv::CALIB_FIX_K5);
 
-  cv::Mat img = cv::imread(image_names[0]);
-  if (img.empty()) {
-      std::cerr << "Failed to load reference image to get image size!" << std::endl;
-      return -1;
-  }
-  cv::Mat img1 = img(cv::Rect(0, 0, img.cols / 2, img.rows));
-  cv::Mat per_view_errors;
-  // double rms = cv::stereoCalibrate(object_points, left_img_points, right_img_points, K1, D1, K2, D2,
-  //                     cv::Size(img1.size().width/2, img1.size().height), R, T, E, F, per_view_errors, flags,
-  //                   cv::TermCriteria(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 100, 1e-5));
+  auto criteria = cv::TermCriteria(cv::TermCriteria::EPS | cv::TermCriteria::MAX_ITER, 100, 1E-5);
 
   double rms = cv::stereoCalibrate(object_points, left_img_points, right_img_points, K1, D1, K2, D2,
-                      img1.size(), R, T, E, F, per_view_errors, flags,
-                    cv::TermCriteria(cv::TermCriteria::COUNT | cv::TermCriteria::EPS, 100, 1e-5));
-  cout << "img1 size: " << img1.size() << endl;
+                      img.size(), R, T, E, F, per_view_errors, flags, criteria);
+
+  cout << "img size: " << img.size() << endl;
   cout << "RMS error: " << rms << endl;
 
   cv::FileStorage fs1(out_file, cv::FileStorage::WRITE);
@@ -241,13 +257,7 @@ int main(int argc, char* argv[]) {
 
   cv::Mat R1, R2, P1, P2, Q;
 
-  // if (K1.empty() || K2.empty() || D1.empty() || D2.empty() || R.empty() || T.empty()) {
-  //   cout << "Error: One or more input matrices (K1, K2, D1, D2, R, T) are empty. Cannot perform stereo rectification." << endl;
-  //   return -1;
-  // }
-
-  // cv::stereoRectify(K1, D1, K2, D2, img1.size(), R, T, R1, R2, P1, P2, Q);
-  cv::stereoRectify(K1, D1, K2, D2, img1.size(), R, T, R1, R2, P1, P2, Q, 0, 0);
+  cv::stereoRectify(K1, D1, K2, D2, img.size(), R, T, R1, R2, P1, P2, Q, 0, 0);
 
   fs1 << "R1" << R1;
   fs1 << "R2" << R2;
